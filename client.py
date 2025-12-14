@@ -15,15 +15,29 @@ from claude_code_sdk.types import HookMatcher
 from security import bash_security_hook
 
 
-# Puppeteer MCP tools for browser automation
-PUPPETEER_TOOLS = [
-    "mcp__puppeteer__puppeteer_navigate",
-    "mcp__puppeteer__puppeteer_screenshot",
-    "mcp__puppeteer__puppeteer_click",
-    "mcp__puppeteer__puppeteer_fill",
-    "mcp__puppeteer__puppeteer_select",
-    "mcp__puppeteer__puppeteer_hover",
-    "mcp__puppeteer__puppeteer_evaluate",
+# Playwright MCP tools for browser automation (no screenshots for speed)
+PLAYWRIGHT_TOOLS = [
+    # Core navigation & snapshots
+    "mcp__playwright__browser_navigate",
+    "mcp__playwright__browser_snapshot",
+    # Interactions
+    "mcp__playwright__browser_click",
+    "mcp__playwright__browser_fill_form",
+    "mcp__playwright__browser_select_option",
+    "mcp__playwright__browser_hover",
+    "mcp__playwright__browser_type",
+    "mcp__playwright__browser_press_key",
+    # Waiting & verification
+    "mcp__playwright__browser_wait_for",
+    "mcp__playwright__browser_verify_element_visible",
+    "mcp__playwright__browser_verify_text_visible",
+    # Dialogs (alert, confirm, prompt)
+    "mcp__playwright__browser_handle_dialog",
+    # Debugging & escape hatch
+    "mcp__playwright__browser_console_messages",
+    "mcp__playwright__browser_evaluate",
+    "mcp__playwright__browser_run_code",
+    "mcp__playwright__browser_close",
 ]
 
 # Built-in tools
@@ -79,8 +93,8 @@ def create_client(project_dir: Path, model: str) -> ClaudeSDKClient:
                 # Bash permission granted here, but actual commands are validated
                 # by the bash_security_hook (see security.py for allowed commands)
                 "Bash(*)",
-                # Allow Puppeteer MCP tools for browser automation
-                *PUPPETEER_TOOLS,
+                # Allow Playwright MCP tools for browser automation
+                *PLAYWRIGHT_TOOLS,
             ],
         },
     }
@@ -97,7 +111,7 @@ def create_client(project_dir: Path, model: str) -> ClaudeSDKClient:
     print("   - Sandbox enabled (OS-level bash isolation)")
     print(f"   - Filesystem restricted to: {project_dir.resolve()}")
     print("   - Bash commands restricted to allowlist (see security.py)")
-    print("   - MCP servers: puppeteer (browser automation)")
+    print("   - MCP servers: playwright (browser automation)")
     print()
 
     return ClaudeSDKClient(
@@ -106,10 +120,11 @@ def create_client(project_dir: Path, model: str) -> ClaudeSDKClient:
             system_prompt="You are an expert full-stack developer building a production-quality web application.",
             allowed_tools=[
                 *BUILTIN_TOOLS,
-                *PUPPETEER_TOOLS,
+                *PLAYWRIGHT_TOOLS,
             ],
             mcp_servers={
-                "puppeteer": {"command": "npx", "args": ["puppeteer-mcp-server"]}
+                "playwright": {"command": "npx", "args": ["@playwright/mcp@latest", "--headless"]}
+                # "playwright": {"command": "npx", "args": ["@playwright/mcp@latest"]}
             },
             hooks={
                 "PreToolUse": [
