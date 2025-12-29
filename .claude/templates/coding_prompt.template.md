@@ -48,8 +48,6 @@ chmod +x init.sh
 
 Otherwise, start servers manually and document the process.
 
-IMPORTANT! ALWAYS start the app on port 3000! Use npx kill-port 3000 to free up the port if already in use.
-
 ### STEP 3: VERIFICATION TEST (CRITICAL!)
 
 **MANDATORY BEFORE NEW WORK:**
@@ -60,9 +58,11 @@ new, you MUST run verification tests.
 Run 1-2 of the features marked as passing that are most core to the app's functionality to verify they still work.
 
 To get passing features for regression testing:
+
 ```
 Use the feature_get_for_regression tool (returns up to 3 random passing features)
 ```
+
 For example, if this were a chat app, you should perform a test that logs into the app, sends a message, and gets a response.
 
 **If you find ANY issues (functional or visual):**
@@ -287,12 +287,14 @@ Before context fills up:
 Available tools:
 
 **Navigation & Screenshots:**
+
 - browser_navigate - Navigate to a URL
 - browser_navigate_back - Go back to previous page
 - browser_take_screenshot - Capture screenshot (use for visual verification)
 - browser_snapshot - Get accessibility tree snapshot (structured page data)
 
 **Element Interaction:**
+
 - browser_click - Click elements (has built-in auto-wait)
 - browser_type - Type text into editable elements
 - browser_fill_form - Fill multiple form fields at once
@@ -302,11 +304,13 @@ Available tools:
 - browser_press_key - Press keyboard keys
 
 **Debugging & Monitoring:**
+
 - browser_console_messages - Get browser console output (check for errors)
 - browser_network_requests - Monitor API calls and responses
 - browser_evaluate - Execute JavaScript (use sparingly)
 
 **Browser Management:**
+
 - browser_close - Close the browser
 - browser_resize - Resize browser window (use to test mobile: 375x667, tablet: 768x1024, desktop: 1280x720)
 - browser_tabs - Manage browser tabs
@@ -315,6 +319,7 @@ Available tools:
 - browser_file_upload - Upload files
 
 **Key Benefits:**
+
 - All interaction tools have **built-in auto-wait** - no manual timeouts needed
 - Use `browser_console_messages` to detect JavaScript errors
 - Use `browser_network_requests` to verify API calls succeed
@@ -367,6 +372,7 @@ When building applications that require email functionality (password resets, em
 - Any notification content should be logged to the terminal
 
 **During testing:**
+
 1. Trigger the email action (e.g., click "Forgot Password")
 2. Check the terminal/server logs for the generated link
 3. Use that link directly to verify the functionality works

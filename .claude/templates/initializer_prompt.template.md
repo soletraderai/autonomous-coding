@@ -50,7 +50,7 @@ Use the feature_create_bulk tool with features=[
 
 **Requirements for features:**
 
-- Feature count must match the `feature_count` specified in app_spec.txt (currently 25)
+- Feature count must match the `feature_count` specified in app_spec.txt
 - Reference tiers for other projects:
   - **Simple apps**: ~150 tests
   - **Medium apps**: ~250 tests

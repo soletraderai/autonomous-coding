@@ -1,5 +1,17 @@
 ---
-description: Create an app spec for autonomous coding
+description: Create an app spec for autonomous coding (project)
+---
+
+# PROJECT DIRECTORY
+
+This command **requires** the project directory as an argument via `$ARGUMENTS`.
+
+**Example:** `/create-spec generations/my-app`
+
+**Output location:** `$ARGUMENTS/prompts/app_spec.txt` and `$ARGUMENTS/prompts/initializer_prompt.md`
+
+If `$ARGUMENTS` is empty, inform the user they must provide a project path and exit.
+
 ---
 
 # GOAL
@@ -335,9 +347,15 @@ Options:
 
 **Note: This section is for YOU (the agent) to execute. Do not burden the user with these technical details.**
 
+## Output Directory
+
+The output directory is: `$ARGUMENTS/prompts/`
+
 Once the user approves, generate these files:
 
-## 1. Generate `prompts/app_spec.txt`
+## 1. Generate `app_spec.txt`
+
+**Output path:** `$ARGUMENTS/prompts/app_spec.txt`
 
 Create a new file using this XML structure:
 
@@ -471,14 +489,19 @@ Create a new file using this XML structure:
 </project_specification>
 ```
 
-## 2. Update `prompts/initializer_prompt.md`
+## 2. Update `initializer_prompt.md`
 
-Read the existing file and update the feature count references to match the derived count from Phase 4L:
+**Output path:** `$ARGUMENTS/prompts/initializer_prompt.md`
+
+If the output directory has an existing `initializer_prompt.md`, read it and update the feature count.
+If not, copy from `.claude/templates/initializer_prompt.template.md` first, then update.
+
+Update the feature count references to match the derived count from Phase 4L:
 
 - Line containing "create ... test cases" - update to the derived feature count
 - Line containing "Minimum ... features" - update to the derived feature count
 
-**Note:** You do NOT need to update `prompts/coding_prompt.md` - the coding agent works through features one at a time regardless of total count.
+**Note:** You do NOT need to update `coding_prompt.md` - the coding agent works through features one at a time regardless of total count.
 
 ---
 
@@ -486,33 +509,29 @@ Read the existing file and update the feature count references to match the deri
 
 Once files are generated, tell the user what to do next:
 
-> "Your specification files have been created! Here's what to do next:
+> "Your specification files have been created in `$ARGUMENTS/prompts/`!
 >
-> **1. Run the autonomous coding agent:**
+> **Files created:**
+> - `$ARGUMENTS/prompts/app_spec.txt`
+> - `$ARGUMENTS/prompts/initializer_prompt.md`
+>
+> The autonomous coding agent will start automatically when you exit this session.
+> Or you can run it manually:
 >
 > ```bash
-> python autonomous_agent_demo.py --project-dir ./[project_name]
-> ```
->
-> **2. For a quick test run (recommended first time):**
->
-> ```bash
-> python autonomous_agent_demo.py --project-dir ./[project_name] --max-iterations 3
+> python autonomous_agent_demo.py --project-dir [project_name]
 > ```
 >
 > **Important timing expectations:**
 >
-> - **First session:** The agent generates a feature_list.json with all your test cases. This takes several minutes and may appear to hang - this is normal.
+> - **First session:** The agent generates features in the database. This takes several minutes.
 > - **Subsequent sessions:** Each coding iteration takes 5-15 minutes depending on complexity.
 > - **Full app:** Building all [X] features will take many hours across multiple sessions.
 >
 > **Controls:**
 >
 > - Press `Ctrl+C` to pause at any time
-> - Run the same command again to resume where you left off
->
-> **Check your generated app:**
-> After the agent runs, your project will be in `./[project_name]/` with the generated application code."
+> - Run the same command again to resume where you left off"
 
 Replace `[project_name]` with the actual project name they provided, and `[X]` with their feature count.
 

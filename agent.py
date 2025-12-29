@@ -13,7 +13,12 @@ from claude_agent_sdk import ClaudeSDKClient
 
 from client import create_client
 from progress import print_session_header, print_progress_summary, has_features
-from prompts import get_initializer_prompt, get_coding_prompt, copy_spec_to_project
+from prompts import (
+    get_initializer_prompt,
+    get_coding_prompt,
+    copy_spec_to_project,
+    has_project_prompts,
+)
 
 
 # Configuration
@@ -160,11 +165,12 @@ async def run_autonomous_agent(
         client = create_client(project_dir, model)
 
         # Choose prompt based on session type
+        # Pass project_dir to enable project-specific prompts
         if is_first_run:
-            prompt = get_initializer_prompt()
+            prompt = get_initializer_prompt(project_dir)
             is_first_run = False  # Only use initializer once
         else:
-            prompt = get_coding_prompt()
+            prompt = get_coding_prompt(project_dir)
 
         # Run session with async context manager
         async with client:

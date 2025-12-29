@@ -2,6 +2,10 @@
 """
 Simple CLI launcher for the Autonomous Coding Agent.
 Provides an interactive menu to create new projects or continue existing ones.
+
+Supports two paths for new projects:
+1. Claude path: Use /create-spec to generate spec interactively
+2. Manual path: Edit template files directly, then continue
 """
 
 import os
@@ -9,28 +13,54 @@ import sys
 import subprocess
 from pathlib import Path
 
+from prompts import (
+    scaffold_project_prompts,
+    has_project_prompts,
+    get_project_prompts_dir,
+)
 
-# Directory containing prompt files
-PROMPTS_DIR = Path(__file__).parent / "prompts"
+
+# Directory containing generated projects
+GENERATIONS_DIR = Path(__file__).parent / "generations"
 
 
-def check_spec_exists() -> bool:
-    """Check if valid spec files exist."""
-    app_spec = PROMPTS_DIR / "app_spec.txt"
-    if not app_spec.exists():
-        return False
-    content = app_spec.read_text(encoding="utf-8")
-    return "<project_specification>" in content
+def check_spec_exists(project_dir: Path) -> bool:
+    """
+    Check if valid spec files exist for a project.
+
+    Checks in order:
+    1. Project prompts directory: {project_dir}/prompts/app_spec.txt
+    2. Project root (legacy): {project_dir}/app_spec.txt
+    """
+    # Check project prompts directory first
+    project_prompts = get_project_prompts_dir(project_dir)
+    spec_file = project_prompts / "app_spec.txt"
+    if spec_file.exists():
+        try:
+            content = spec_file.read_text(encoding="utf-8")
+            return "<project_specification>" in content
+        except (OSError, PermissionError):
+            return False
+
+    # Check legacy location in project root
+    legacy_spec = project_dir / "app_spec.txt"
+    if legacy_spec.exists():
+        try:
+            content = legacy_spec.read_text(encoding="utf-8")
+            return "<project_specification>" in content
+        except (OSError, PermissionError):
+            return False
+
+    return False
 
 
 def get_existing_projects() -> list[str]:
     """Get list of existing projects from generations folder."""
-    generations_dir = Path("generations")
-    if not generations_dir.exists():
+    if not GENERATIONS_DIR.exists():
         return []
 
     projects = []
-    for item in generations_dir.iterdir():
+    for item in GENERATIONS_DIR.iterdir():
         if item.is_dir() and not item.name.startswith('.'):
             projects.append(item.name)
 
@@ -94,8 +124,14 @@ def get_new_project_name() -> str | None:
     if not name:
         return None
 
-    # Basic validation
-    invalid_chars = '<>:"/\\|?*'
+    # Basic validation - OS-aware invalid characters
+    # Windows has more restrictions than Unix
+    if sys.platform == "win32":
+        invalid_chars = '<>:"/\\|?*'
+    else:
+        # Unix only restricts / and null
+        invalid_chars = '/'
+
     for char in invalid_chars:
         if char in name:
             print(f"Invalid character '{char}' in project name")
@@ -104,11 +140,38 @@ def get_new_project_name() -> str | None:
     return name
 
 
-def run_spec_creation() -> bool:
-    """Run Claude Code with /create-spec command to create project specification."""
+def ensure_project_scaffolded(project_name: str) -> Path:
+    """
+    Ensure project directory exists with prompt templates.
+
+    Creates the project directory and copies template files if needed.
+
+    Returns:
+        The project directory path
+    """
+    project_dir = GENERATIONS_DIR / project_name
+
+    # Create project directory if it doesn't exist
+    project_dir.mkdir(parents=True, exist_ok=True)
+
+    # Scaffold prompts (copies templates if they don't exist)
+    print(f"\nSetting up project: {project_name}")
+    scaffold_project_prompts(project_dir)
+
+    return project_dir
+
+
+def run_spec_creation(project_dir: Path) -> bool:
+    """
+    Run Claude Code with /create-spec command to create project specification.
+
+    The project path is passed as an argument so create-spec knows where to write files.
+    """
     print("\n" + "=" * 50)
     print("  Project Specification Setup")
     print("=" * 50)
+    print(f"\nProject directory: {project_dir}")
+    print(f"Prompts will be saved to: {get_project_prompts_dir(project_dir)}")
     print("\nLaunching Claude Code for interactive spec creation...")
     print("Answer the questions to define your project.")
     print("When done, Claude will generate the spec files.")
@@ -116,21 +179,22 @@ def run_spec_creation() -> bool:
 
     try:
         # Launch Claude Code with /create-spec command
-        # This blocks until user exits Claude Code
+        # Pass the project directory as a separate argument
         subprocess.run(
-            ["claude", "/create-spec"],
+            ["claude", "/create-spec", str(project_dir)],
             check=False,  # Don't raise on non-zero exit
             cwd=str(Path(__file__).parent)  # Run from project root
         )
 
-        # Check if spec was created
-        if check_spec_exists():
+        # Check if spec was created in project prompts directory
+        if check_spec_exists(project_dir):
             print("\n" + "-" * 50)
             print("Spec files created successfully!")
             return True
         else:
             print("\n" + "-" * 50)
-            print("Spec creation incomplete. Please try again.")
+            print("Spec creation incomplete.")
+            print(f"Please ensure app_spec.txt exists in: {get_project_prompts_dir(project_dir)}")
             return False
 
     except FileNotFoundError:
@@ -143,16 +207,55 @@ def run_spec_creation() -> bool:
         return False
 
 
+def run_manual_spec_flow(project_dir: Path) -> bool:
+    """
+    Guide user through manual spec editing flow.
+
+    Shows the paths to edit and waits for user to press Enter when ready.
+    """
+    prompts_dir = get_project_prompts_dir(project_dir)
+
+    print("\n" + "-" * 50)
+    print("  Manual Specification Setup")
+    print("-" * 50)
+    print("\nTemplate files have been created. Edit these files in your editor:")
+    print(f"\n  Required:")
+    print(f"    {prompts_dir / 'app_spec.txt'}")
+    print(f"\n  Optional (customize agent behavior):")
+    print(f"    {prompts_dir / 'initializer_prompt.md'}")
+    print(f"    {prompts_dir / 'coding_prompt.md'}")
+    print("\n" + "-" * 50)
+    print("\nThe app_spec.txt file contains a template with placeholders.")
+    print("Replace the placeholders with your actual project specification.")
+    print("\nWhen you're done editing, press Enter to continue...")
+
+    try:
+        input()
+    except KeyboardInterrupt:
+        print("\n\nCancelled.")
+        return False
+
+    # Validate that spec was edited
+    if check_spec_exists(project_dir):
+        print("\nSpec file validated successfully!")
+        return True
+    else:
+        print("\nWarning: The app_spec.txt file still contains the template placeholder.")
+        print("The agent may not work correctly without a proper specification.")
+        confirm = input("Continue anyway? [y/N]: ").strip().lower()
+        return confirm == 'y'
+
+
 def ask_spec_creation_choice() -> str | None:
-    """Ask user whether to create spec with Claude or skip."""
+    """Ask user whether to create spec with Claude or manually."""
     print("\n" + "-" * 40)
     print("  Specification Setup")
     print("-" * 40)
     print("\nHow would you like to define your project?")
     print("\n[1] Create spec with Claude (recommended)")
     print("    Interactive conversation to define your project")
-    print("\n[2] Skip - use existing spec")
-    print("    Use manually edited app_spec.txt and initializer_prompt.md")
+    print("\n[2] Edit templates manually")
+    print("    Edit the template files directly in your editor")
     print("\n[b] Back to main menu")
     print()
 
@@ -164,10 +267,22 @@ def ask_spec_creation_choice() -> str | None:
 
 
 def create_new_project_flow() -> str | None:
-    """Get project name and optionally create spec."""
+    """
+    Complete flow for creating a new project.
+
+    1. Get project name
+    2. Create project directory and scaffold prompts
+    3. Ask: Claude or Manual?
+    4. If Claude: Run /create-spec with project path
+    5. If Manual: Show paths, wait for Enter
+    6. Return project name if successful
+    """
     project_name = get_new_project_name()
     if not project_name:
         return None
+
+    # Create project directory and scaffold prompts FIRST
+    project_dir = ensure_project_scaffolded(project_name)
 
     # Ask user how they want to handle spec creation
     choice = ask_spec_creation_choice()
@@ -176,25 +291,33 @@ def create_new_project_flow() -> str | None:
         return None
     elif choice == '1':
         # Create spec with Claude
-        success = run_spec_creation()
+        success = run_spec_creation(project_dir)
+        if not success:
+            print("\nYou can try again later or edit the templates manually.")
+            retry = input("Start agent anyway? [y/N]: ").strip().lower()
+            if retry != 'y':
+                return None
+    elif choice == '2':
+        # Manual mode - guide user through editing
+        success = run_manual_spec_flow(project_dir)
         if not success:
             return None
-    elif choice == '2':
-        # Skip - verify spec exists
-        if check_spec_exists():
-            print("\nUsing existing spec files.")
-        else:
-            print("\nWarning: No valid spec found in prompts/app_spec.txt")
-            print("The agent may not work correctly without a spec.")
-            confirm = input("Continue anyway? [y/N]: ").strip().lower()
-            if confirm != 'y':
-                return None
 
     return project_name
 
 
 def run_agent(project_name: str) -> None:
     """Run the autonomous agent with the given project."""
+    project_dir = GENERATIONS_DIR / project_name
+
+    # Final validation before running
+    if not has_project_prompts(project_dir):
+        print(f"\nWarning: No valid spec found for project '{project_name}'")
+        print("The agent may not work correctly.")
+        confirm = input("Continue anyway? [y/N]: ").strip().lower()
+        if confirm != 'y':
+            return
+
     print(f"\nStarting agent for project: {project_name}")
     print("-" * 50)
 
