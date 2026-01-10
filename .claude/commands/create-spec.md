@@ -2,15 +2,33 @@
 description: Create an app spec for autonomous coding (project)
 ---
 
-# PROJECT DIRECTORY
+# PROJECT DIRECTORY AND PHASE FLAG
 
 This command **requires** the project directory as an argument via `$ARGUMENTS`.
 
-**Example:** `/create-spec generations/my-app`
+**Optional phase flag:** Add `--phase2`, `--phase3`, etc. to create phase-specific specs.
 
-**Output location:** `$ARGUMENTS/prompts/app_spec.txt` and `$ARGUMENTS/prompts/initializer_prompt.md`
+**Examples:**
+- `/create-spec generations/my-app` - Creates Phase 1 spec (app_spec.txt)
+- `/create-spec generations/my-app --phase2` - Creates Phase 2 spec (phase2_spec.txt)
+- `/create-spec . --phase3` - Creates Phase 3 spec in current directory
 
-If `$ARGUMENTS` is empty, inform the user they must provide a project path and exit.
+**Output locations:**
+- No flag: `$ARGUMENTS/prompts/app_spec.txt` and `$ARGUMENTS/prompts/initializer_prompt.md`
+- `--phase2`: `$ARGUMENTS/prompts/phase2_spec.txt`
+- `--phase3`: `$ARGUMENTS/prompts/phase3_spec.txt`
+- etc.
+
+**Parse `$ARGUMENTS`:** Extract the directory path and any `--phaseN` flag.
+
+If the directory path is empty, inform the user they must provide a project path and exit.
+
+**For Phase 2+:** Before proceeding, verify prerequisites:
+- Phase 2 requires `app_spec.txt` to exist
+- Phase 3 requires `phase2_spec.txt` to exist
+- etc.
+
+If prerequisites are missing, tell the user which phase spec they need to create first.
 
 ---
 
@@ -349,9 +367,13 @@ Options:
 
 ## Output Directory
 
-The output directory is: `$ARGUMENTS/prompts/`
+The output directory is: `[parsed_directory]/prompts/` (extracted from `$ARGUMENTS`, excluding any `--phaseN` flag)
 
-Once the user approves, generate these files:
+Once the user approves, generate the appropriate files based on the phase:
+
+---
+
+## FOR PHASE 1 (no --phase flag):
 
 ## 1. Generate `app_spec.txt`
 
@@ -505,30 +527,159 @@ Update the feature count references to match the derived count from Phase 4L:
 
 ---
 
+## FOR PHASE 2+ (with --phaseN flag):
+
+### Context Gathering
+
+Before starting the conversation, read and understand the existing specs:
+
+1. **Read `[parsed_directory]/prompts/app_spec.txt`** - Understand the project and Phase 1
+2. **Read any previous phase specs** (phase2_spec.txt, etc.) - Understand what's been built
+
+Present a brief summary:
+
+> "I've reviewed your project specs:
+>
+> **Project:** [project name]
+> **Phase 1 features:** [brief summary]
+> [If previous phases exist: **Phase N added:** [summary]]
+>
+> Now let's define what Phase [N] will add."
+
+### Modified Conversation Flow for Phase 2+
+
+Instead of asking about project basics (already defined in Phase 1), focus on:
+
+1. **Phase Goals**: "What's the main goal for Phase [N]? What new functionality builds on what's already there?"
+2. **New Features**: What screens, actions, and capabilities does this phase add?
+3. **Changes to Existing**: Any modifications to Phase 1 functionality?
+4. **Dependencies**: Which existing features does this phase depend on?
+5. **Feature Count**: Derive the count for this phase's new features only
+
+### Generate `phase[N]_spec.txt`
+
+**Output path:** `[parsed_directory]/prompts/phase[N]_spec.txt`
+
+Use this structure:
+
+```xml
+<phase_specification>
+  <phase_number>[N]</phase_number>
+  <depends_on>phase[N-1]</depends_on>
+
+  <phase_goals>
+    [2-3 sentence description of what this phase accomplishes]
+  </phase_goals>
+
+  <feature_count>[derived count for this phase only]</feature_count>
+
+  <new_features>
+    <[category_name]>
+      - [Feature 1]
+      - [Feature 2]
+    </[category_name]>
+  </new_features>
+
+  <database_changes>
+    <new_tables>
+      <[table_name]>
+        - [field1], [field2], [field3]
+      </[table_name]>
+    </new_tables>
+    <modified_tables>
+      <[table_name]>
+        - Add: [new_field]
+      </[table_name]>
+    </modified_tables>
+  </database_changes>
+
+  <new_api_endpoints>
+    <[category]>
+      - [VERB] /api/[path]
+    </[category]>
+  </new_api_endpoints>
+
+  <ui_additions>
+    <new_screens>
+      - [Screen 1]: [Description]
+    </new_screens>
+    <modified_screens>
+      - [Screen 1]: [What changes]
+    </modified_screens>
+  </ui_additions>
+
+  <dependencies>
+    <requires_from_previous_phases>
+      - [Feature from Phase 1 that must be complete]
+    </requires_from_previous_phases>
+  </dependencies>
+
+  <implementation_steps>
+    <step number="1">
+      <title>[Step Title]</title>
+      <tasks>
+        - [Task 1]
+        - [Task 2]
+      </tasks>
+    </step>
+  </implementation_steps>
+
+  <success_criteria>
+    <phase_complete_when>
+      - [Criterion 1]
+      - [Criterion 2]
+    </phase_complete_when>
+  </success_criteria>
+</phase_specification>
+```
+
+**Note:** Do NOT update `initializer_prompt.md` for Phase 2+ - the initializer already handles phase-specific spec loading.
+
+---
+
 # AFTER FILE GENERATION: NEXT STEPS
 
 Once files are generated, tell the user what to do next:
 
-> "Your specification files have been created in `$ARGUMENTS/prompts/`!
+## For Phase 1 (no flag):
+
+> "Your specification files have been created!
 >
 > **Files created:**
-> - `$ARGUMENTS/prompts/app_spec.txt`
-> - `$ARGUMENTS/prompts/initializer_prompt.md`
+> - `[directory]/prompts/app_spec.txt`
+> - `[directory]/prompts/initializer_prompt.md`
 >
-> **Next step:** Type `/exit` to exit this Claude session. The autonomous coding agent will start automatically.
+> **Next step:** Run the autonomous agent:
+> ```bash
+> python client.py
+> ```
 >
 > **Important timing expectations:**
->
 > - **First session:** The agent generates features in the database. This takes several minutes.
 > - **Subsequent sessions:** Each coding iteration takes 5-15 minutes depending on complexity.
 > - **Full app:** Building all [X] features will take many hours across multiple sessions.
 >
 > **Controls:**
->
 > - Press `Ctrl+C` to pause the agent at any time
-> - Run `start.bat` (Windows) or `./start.sh` (Mac/Linux) to resume where you left off"
+> - Run `python client.py` again to resume where you left off"
 
-Replace `[X]` with their feature count.
+## For Phase 2+ (with --phaseN flag):
+
+> "Phase [N] specification has been created!
+>
+> **File created:** `[directory]/prompts/phase[N]_spec.txt`
+>
+> **To run Phase [N]:**
+> ```bash
+> python client.py --phase [N]
+> ```
+>
+> **Important:** Make sure Phase [N-1] is complete before running Phase [N].
+> The autonomous agent will use features from previous phases as building blocks.
+>
+> **This phase adds [X] new features** to your application."
+
+Replace `[X]` with their feature count and `[N]` with the phase number.
 
 ---
 
@@ -546,6 +697,10 @@ Replace `[X]` with their feature count.
 
 # BEGIN
 
+First, parse `$ARGUMENTS` to extract the directory path and any `--phaseN` flag.
+
+## If Phase 1 (no --phase flag):
+
 Start by greeting the user warmly. Ask ONLY the Phase 1 questions:
 
 > "Hi! I'm here to help you create a detailed specification for your app.
@@ -558,4 +713,23 @@ Start by greeting the user warmly. Ask ONLY the Phase 1 questions:
 
 **STOP HERE and wait for their response.** Do not ask any other questions yet. Do not use AskUserQuestion yet. Just have a conversation about their project basics first.
 
-After they respond, acknowledge what they said, then move to Phase 2.
+After they respond, acknowledge what they said, then move to Phase 2 of the conversation flow.
+
+## If Phase 2+ (with --phaseN flag):
+
+1. Check that prerequisite specs exist (app_spec.txt for phase 2, phase2_spec.txt for phase 3, etc.)
+2. Read the existing specs to understand the project
+3. Present a summary of what's been built
+
+Then start the Phase 2+ conversation:
+
+> "Hi! I see you're ready to define Phase [N] of your project.
+>
+> I've reviewed your existing specs:
+> - **Project:** [name from app_spec.txt]
+> - **Phase 1:** [brief summary of core features]
+> [If applicable: - **Phase 2:** [summary]]
+>
+> What new functionality do you want Phase [N] to add?"
+
+**STOP HERE and wait for their response.** Then continue with the Phase 2+ conversation flow.
