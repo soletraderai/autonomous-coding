@@ -112,6 +112,82 @@ def get_app_spec(project_dir: Path) -> str:
     raise FileNotFoundError(f"No app_spec.txt found for project: {project_dir}")
 
 
+def get_phase_spec(project_dir: Path, phase: int) -> str:
+    """
+    Load the specification for a specific phase.
+
+    Phase 1 uses app_spec.txt.
+    Phase N (N > 1) uses prompts/phaseN_spec.txt.
+
+    Args:
+        project_dir: The project directory
+        phase: Phase number (1, 2, 3, etc.)
+
+    Returns:
+        The specification content as a string
+
+    Raises:
+        FileNotFoundError: If spec file not found for the phase
+    """
+    if phase == 1:
+        return get_app_spec(project_dir)
+
+    # For phase 2+, look for phaseN_spec.txt
+    project_prompts = get_project_prompts_dir(project_dir)
+    spec_filename = f"phase{phase}_spec.txt"
+    spec_path = project_prompts / spec_filename
+
+    if spec_path.exists():
+        try:
+            return spec_path.read_text(encoding="utf-8")
+        except (OSError, PermissionError) as e:
+            raise FileNotFoundError(f"Could not read {spec_path}: {e}") from e
+
+    # Also check project root as fallback
+    root_spec = project_dir / spec_filename
+    if root_spec.exists():
+        try:
+            return root_spec.read_text(encoding="utf-8")
+        except (OSError, PermissionError) as e:
+            raise FileNotFoundError(f"Could not read {root_spec}: {e}") from e
+
+    raise FileNotFoundError(
+        f"No specification file found for Phase {phase}.\n"
+        f"Expected: {spec_path}\n"
+        f"Create this file with your Phase {phase} requirements."
+    )
+
+
+def get_phase_initializer_prompt(project_dir: Path, phase: int) -> str:
+    """
+    Load the initializer prompt for a specific phase.
+
+    For phase 1, uses the standard initializer_prompt.
+    For phase 2+, uses phase_initializer_prompt with phase context.
+
+    Args:
+        project_dir: The project directory
+        phase: Phase number
+
+    Returns:
+        The prompt content with phase information substituted
+    """
+    if phase == 1:
+        return get_initializer_prompt(project_dir)
+
+    # Load phase initializer template
+    template = load_prompt("phase_initializer_prompt", project_dir)
+
+    # Load the phase spec
+    phase_spec = get_phase_spec(project_dir, phase)
+
+    # Substitute placeholders
+    prompt = template.replace("{{PHASE_NUMBER}}", str(phase))
+    prompt = prompt.replace("{{PHASE_SPEC}}", phase_spec)
+
+    return prompt
+
+
 def scaffold_project_prompts(project_dir: Path) -> Path:
     """
     Create the project prompts directory and copy base templates.

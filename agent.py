@@ -12,10 +12,18 @@ from typing import Optional
 from claude_agent_sdk import ClaudeSDKClient
 
 from client import create_client
-from progress import print_session_header, print_progress_summary, has_features
+from progress import (
+    print_session_header,
+    print_progress_summary,
+    has_features,
+    is_phase_complete,
+    count_passing_tests,
+)
 from prompts import (
     get_initializer_prompt,
     get_coding_prompt,
+    get_phase_initializer_prompt,
+    get_phase_spec,
     copy_spec_to_project,
     has_project_prompts,
 )
@@ -103,6 +111,7 @@ async def run_autonomous_agent(
     project_dir: Path,
     model: str,
     max_iterations: Optional[int] = None,
+    phase: int = 1,
 ) -> None:
     """
     Run the autonomous agent loop.
@@ -111,12 +120,14 @@ async def run_autonomous_agent(
         project_dir: Directory for the project
         model: Claude model to use
         max_iterations: Maximum number of iterations (None for unlimited)
+        phase: Phase number to run (default: 1)
     """
     print("\n" + "=" * 70)
     print("  AUTONOMOUS CODING AGENT DEMO")
     print("=" * 70)
     print(f"\nProject directory: {project_dir}")
     print(f"Model: {model}")
+    print(f"Phase: {phase}")
     if max_iterations:
         print(f"Max iterations: {max_iterations}")
     else:
@@ -126,25 +137,48 @@ async def run_autonomous_agent(
     # Create project directory
     project_dir.mkdir(parents=True, exist_ok=True)
 
-    # Check if this is a fresh start or continuation
+    # Phase validation: Phase N requires Phase N-1 to be complete
+    if phase > 1:
+        prev_phase = phase - 1
+        if not has_features(project_dir, prev_phase):
+            print(f"\nERROR: Cannot start Phase {phase}")
+            print(f"Phase {prev_phase} has no features. Run Phase {prev_phase} first.")
+            return
+
+        if not is_phase_complete(project_dir, prev_phase):
+            passing, total = count_passing_tests(project_dir, phase=prev_phase)
+            print(f"\nERROR: Cannot start Phase {phase}")
+            print(f"Phase {prev_phase} is not complete: {passing}/{total} tests passing")
+            return
+
+        # Verify phase spec exists
+        try:
+            get_phase_spec(project_dir, phase)
+        except FileNotFoundError as e:
+            print(f"\nERROR: {e}")
+            return
+
+        print(f"Phase {prev_phase} complete. Starting Phase {phase}...")
+
+    # Check if this is a fresh start or continuation for this phase
     # Uses has_features() which checks if the database actually has features,
     # not just if the file exists (empty db should still trigger initializer)
-    is_first_run = not has_features(project_dir)
+    is_first_run = not has_features(project_dir, phase)
 
     if is_first_run:
-        print("Fresh start - will use initializer agent")
+        print(f"Fresh start for Phase {phase} - will use initializer agent")
         print()
         print("=" * 70)
         print("  NOTE: First session takes 10-20+ minutes!")
-        print("  The agent is generating 200 detailed test cases.")
+        print("  The agent is generating detailed test cases.")
         print("  This may appear to hang - it's working. Watch for [Tool: ...] output.")
         print("=" * 70)
         print()
         # Copy the app spec into the project directory for the agent to read
         copy_spec_to_project(project_dir)
     else:
-        print("Continuing existing project")
-        print_progress_summary(project_dir)
+        print(f"Continuing existing project (Phase {phase})")
+        print_progress_summary(project_dir, phase=phase)
 
     # Main loop
     iteration = 0
@@ -162,12 +196,15 @@ async def run_autonomous_agent(
         print_session_header(iteration, is_first_run)
 
         # Create client (fresh context)
-        client = create_client(project_dir, model)
+        client = create_client(project_dir, model, phase)
 
-        # Choose prompt based on session type
+        # Choose prompt based on session type and phase
         # Pass project_dir to enable project-specific prompts
         if is_first_run:
-            prompt = get_initializer_prompt(project_dir)
+            if phase == 1:
+                prompt = get_initializer_prompt(project_dir)
+            else:
+                prompt = get_phase_initializer_prompt(project_dir, phase)
             is_first_run = False  # Only use initializer once
         else:
             prompt = get_coding_prompt(project_dir)
@@ -179,7 +216,7 @@ async def run_autonomous_agent(
         # Handle status
         if status == "continue":
             print(f"\nAgent will auto-continue in {AUTO_CONTINUE_DELAY_SECONDS}s...")
-            print_progress_summary(project_dir)
+            print_progress_summary(project_dir, phase=phase)
             await asyncio.sleep(AUTO_CONTINUE_DELAY_SECONDS)
 
         elif status == "error":
@@ -197,7 +234,8 @@ async def run_autonomous_agent(
     print("  SESSION COMPLETE")
     print("=" * 70)
     print(f"\nProject directory: {project_dir}")
-    print_progress_summary(project_dir)
+    print(f"Phase: {phase}")
+    print_progress_summary(project_dir, phase=phase)
 
     # Print instructions for running the generated application
     print("\n" + "-" * 70)
