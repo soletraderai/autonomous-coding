@@ -11,42 +11,34 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
+# Get current directory as default
+CURRENT_DIR="$(pwd)"
+PROJECT_NAME=$(basename "$CURRENT_DIR")
+
 echo -e "${BLUE}"
 echo "╔════════════════════════════════════════════════════════════╗"
 echo "║         Autonomous Coding Agent - Project Setup            ║"
 echo "╚════════════════════════════════════════════════════════════╝"
 echo -e "${NC}"
 
-# Get project name
-echo -e "${GREEN}What's your project name?${NC}"
-read -p "> " PROJECT_NAME
+# Get project path (default to current directory)
+echo -e "${GREEN}Enter project path:${NC}"
+echo -e "${YELLOW}(Press Enter for current directory: ${CURRENT_DIR})${NC}"
+read -p "> " PROJECT_PATH
 
-if [ -z "$PROJECT_NAME" ]; then
-    echo -e "${RED}Error: Project name cannot be empty${NC}"
-    exit 1
+if [ -z "$PROJECT_PATH" ]; then
+    PROJECT_PATH="$CURRENT_DIR"
+else
+    # Expand ~ if used
+    PROJECT_PATH="${PROJECT_PATH/#\~/$HOME}"
 fi
 
-# Sanitize project name (replace spaces with hyphens, lowercase)
-PROJECT_NAME=$(echo "$PROJECT_NAME" | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd '[:alnum:]-_')
-
-# Get location
-echo ""
-echo -e "${GREEN}Where should the project be created?${NC}"
-echo -e "${YELLOW}(Press Enter for default: ~/Web)${NC}"
-read -p "> " PROJECT_LOCATION
-
-if [ -z "$PROJECT_LOCATION" ]; then
-    PROJECT_LOCATION="$HOME/Web"
-fi
-
-# Expand ~ if used
-PROJECT_LOCATION="${PROJECT_LOCATION/#\~/$HOME}"
-
-# Full project path
-PROJECT_PATH="$PROJECT_LOCATION/$PROJECT_NAME"
+# Get project name from path
+PROJECT_NAME=$(basename "$PROJECT_PATH")
 
 echo ""
-echo -e "${BLUE}Project will be created at: ${PROJECT_PATH}${NC}"
+echo -e "${BLUE}Project: ${PROJECT_NAME}${NC}"
+echo -e "${BLUE}Location: ${PROJECT_PATH}${NC}"
 echo ""
 read -p "Continue? (y/n) " -n 1 -r
 echo ""
@@ -56,15 +48,29 @@ if [[ ! $REPLY =~ ^[Yy]$ ]]; then
     exit 0
 fi
 
-# Check if directory already exists
-if [ -d "$PROJECT_PATH" ]; then
-    echo -e "${RED}Error: Directory already exists: $PROJECT_PATH${NC}"
+# Check if .autonomous already exists
+if [ -d "$PROJECT_PATH/.autonomous" ]; then
+    echo -e "${RED}Error: .autonomous already exists in $PROJECT_PATH${NC}"
     exit 1
 fi
 
-# Create project directory
+# Find best Python (prefer 3.12, 3.11, then fall back to python3)
+if command -v python3.12 &> /dev/null; then
+    PYTHON_CMD="python3.12"
+elif command -v python3.11 &> /dev/null; then
+    PYTHON_CMD="python3.11"
+elif command -v /usr/local/bin/python3.12 &> /dev/null; then
+    PYTHON_CMD="/usr/local/bin/python3.12"
+elif command -v /usr/local/bin/python3.11 &> /dev/null; then
+    PYTHON_CMD="/usr/local/bin/python3.11"
+else
+    PYTHON_CMD="python3"
+fi
+
 echo ""
-echo -e "${BLUE}Creating project directory...${NC}"
+echo -e "${BLUE}Using Python: $($PYTHON_CMD --version)${NC}"
+
+# Create project directory if it doesn't exist
 mkdir -p "$PROJECT_PATH"
 cd "$PROJECT_PATH"
 
@@ -75,10 +81,12 @@ git clone git@github.com:soletraderai/autonomous-coding.git .autonomous
 # Set up Python environment
 echo -e "${BLUE}Setting up Python environment...${NC}"
 cd .autonomous
-python3 -m venv venv
+$PYTHON_CMD -m venv venv
 source venv/bin/activate
+pip install --upgrade pip --quiet
 pip install -r requirements.txt --quiet
-cd ..
+deactivate
+cd "$PROJECT_PATH"
 
 # Create prompts directory and starter app_spec.txt
 echo -e "${BLUE}Creating starter files...${NC}"
@@ -108,15 +116,33 @@ Any other requirements or constraints.
 </project_specification>
 SPEC_EOF
 
-# Initialize git repo for the project
-git init --quiet
-echo ".autonomous/" >> .gitignore
-echo "node_modules/" >> .gitignore
-echo ".env" >> .gitignore
-echo ".env.local" >> .gitignore
+# Initialize git repo if not already a git repo
+if [ ! -d ".git" ]; then
+    echo -e "${BLUE}Initializing git repository...${NC}"
+    git init --quiet
+fi
 
-# Create a simple README
-cat > README.md << README_EOF
+# Create/update .gitignore
+if [ ! -f ".gitignore" ]; then
+    cat > .gitignore << 'GITIGNORE_EOF'
+.autonomous/
+node_modules/
+.env
+.env.local
+.next/
+dist/
+build/
+GITIGNORE_EOF
+else
+    # Append .autonomous/ if not already in .gitignore
+    if ! grep -q "^\.autonomous/" .gitignore 2>/dev/null; then
+        echo ".autonomous/" >> .gitignore
+    fi
+fi
+
+# Create README if it doesn't exist
+if [ ! -f "README.md" ]; then
+    cat > README.md << README_EOF
 # $PROJECT_NAME
 
 Built with [Autonomous Coding Agent](https://github.com/soletraderai/autonomous-coding)
@@ -136,6 +162,7 @@ For additional features after Phase 1:
 1. Create \`prompts/phase2_spec.txt\` with new requirements
 2. Run: \`python .autonomous/autonomous_agent_demo.py --project-dir . --phase 2\`
 README_EOF
+fi
 
 # Done!
 echo ""
@@ -146,9 +173,8 @@ echo ""
 echo -e "Project created at: ${BLUE}$PROJECT_PATH${NC}"
 echo ""
 echo -e "${YELLOW}Next steps:${NC}"
-echo "  1. cd $PROJECT_PATH"
-echo "  2. Edit prompts/app_spec.txt with your project requirements"
-echo "  3. Run the agent:"
+echo "  1. Edit prompts/app_spec.txt with your project requirements"
+echo "  2. Run the agent:"
 echo ""
 echo -e "     ${GREEN}source .autonomous/venv/bin/activate${NC}"
 echo -e "     ${GREEN}python .autonomous/autonomous_agent_demo.py --project-dir . --phase 1${NC}"
