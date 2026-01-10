@@ -674,8 +674,8 @@ Once files are generated, tell the user what to do next:
 > python client.py --phase [N]
 > ```
 >
-> **Important:** Make sure Phase [N-1] is complete before running Phase [N].
-> The autonomous agent will use features from previous phases as building blocks.
+> **Note:** Phase [N-1] doesn't need to be 100% complete - you can move on whenever you're ready.
+> The agent will show you the status of previous phases when it starts.
 >
 > **This phase adds [X] new features** to your application."
 

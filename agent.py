@@ -137,18 +137,12 @@ async def run_autonomous_agent(
     # Create project directory
     project_dir.mkdir(parents=True, exist_ok=True)
 
-    # Phase validation: Phase N requires Phase N-1 to be complete
+    # Phase validation: Phase N requires Phase N-1 to have been started
     if phase > 1:
         prev_phase = phase - 1
         if not has_features(project_dir, prev_phase):
             print(f"\nERROR: Cannot start Phase {phase}")
             print(f"Phase {prev_phase} has no features. Run Phase {prev_phase} first.")
-            return
-
-        if not is_phase_complete(project_dir, prev_phase):
-            passing, total = count_passing_tests(project_dir, phase=prev_phase)
-            print(f"\nERROR: Cannot start Phase {phase}")
-            print(f"Phase {prev_phase} is not complete: {passing}/{total} tests passing")
             return
 
         # Verify phase spec exists
@@ -158,7 +152,13 @@ async def run_autonomous_agent(
             print(f"\nERROR: {e}")
             return
 
-        print(f"Phase {prev_phase} complete. Starting Phase {phase}...")
+        # Show status of previous phase (informational, not blocking)
+        passing, total = count_passing_tests(project_dir, phase=prev_phase)
+        if is_phase_complete(project_dir, prev_phase):
+            print(f"Phase {prev_phase} complete ({passing}/{total} passing). Starting Phase {phase}...")
+        else:
+            print(f"Phase {prev_phase} status: {passing}/{total} tests passing")
+            print(f"Starting Phase {phase} anyway...")
 
     # Check if this is a fresh start or continuation for this phase
     # Uses has_features() which checks if the database actually has features,

@@ -50,7 +50,7 @@ Examples:
   # Continue existing project
   python autonomous_agent_demo.py --project-dir ./claude_clone
 
-  # Start Phase 2 (requires Phase 1 complete + phase2_spec.txt)
+  # Start Phase 2 (requires Phase 1 started + phase2_spec.txt)
   python autonomous_agent_demo.py --project-dir ./claude_clone --phase 2
 
 Authentication:
@@ -84,7 +84,7 @@ Authentication:
         "--phase",
         type=int,
         default=1,
-        help="Phase number to run (default: 1). Phase N requires Phase N-1 to be complete.",
+        help="Phase number to run (default: 1). Phase N requires Phase N-1 to have been started.",
     )
 
     return parser.parse_args()

@@ -1,7 +1,7 @@
 ## YOUR ROLE - PHASE {{PHASE_NUMBER}} INITIALIZER AGENT
 
 You are starting a NEW PHASE of development on an existing project.
-This is Phase {{PHASE_NUMBER}} - the project already has completed phases before this.
+This is Phase {{PHASE_NUMBER}} - the project has previous phases that you'll build upon.
 
 ### FIRST: Understand the Existing Project
 
