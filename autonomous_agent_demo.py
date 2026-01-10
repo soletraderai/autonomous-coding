@@ -38,7 +38,7 @@ def parse_args() -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Start fresh project
+  # Start fresh project (Phase 1)
   python autonomous_agent_demo.py --project-dir ./claude_clone
 
   # Use a specific model
@@ -49,6 +49,9 @@ Examples:
 
   # Continue existing project
   python autonomous_agent_demo.py --project-dir ./claude_clone
+
+  # Start Phase 2 (requires Phase 1 complete + phase2_spec.txt)
+  python autonomous_agent_demo.py --project-dir ./claude_clone --phase 2
 
 Authentication:
   Uses Claude CLI credentials from ~/.claude/.credentials.json
@@ -75,6 +78,13 @@ Authentication:
         type=str,
         default=DEFAULT_MODEL,
         help=f"Claude model to use (default: {DEFAULT_MODEL})",
+    )
+
+    parser.add_argument(
+        "--phase",
+        type=int,
+        default=1,
+        help="Phase number to run (default: 1). Phase N requires Phase N-1 to be complete.",
     )
 
     return parser.parse_args()
@@ -105,6 +115,7 @@ def main() -> None:
                 project_dir=project_dir,
                 model=args.model,
                 max_iterations=args.max_iterations,
+                phase=args.phase,
             )
         )
     except KeyboardInterrupt:

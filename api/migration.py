@@ -152,3 +152,50 @@ def export_to_json(
 
     finally:
         session.close()
+
+
+def migrate_add_phase_column(
+    project_dir: Path,
+    session_maker: sessionmaker,
+) -> bool:
+    """
+    Add phase column to existing features table if it doesn't exist.
+
+    Handles backward compatibility for existing databases.
+    All existing features default to phase=1.
+
+    Args:
+        project_dir: Directory containing the project
+        session_maker: SQLAlchemy session maker
+
+    Returns:
+        True if migration was performed, False if column already exists
+    """
+    import sqlite3
+
+    db_file = project_dir / "features.db"
+    if not db_file.exists():
+        return False  # No database to migrate
+
+    conn = sqlite3.connect(db_file)
+    cursor = conn.cursor()
+
+    try:
+        # Check if phase column exists
+        cursor.execute("PRAGMA table_info(features)")
+        columns = [col[1] for col in cursor.fetchall()]
+
+        if "phase" in columns:
+            return False  # Column already exists
+
+        # Add phase column with default value of 1
+        cursor.execute("ALTER TABLE features ADD COLUMN phase INTEGER DEFAULT 1 NOT NULL")
+        conn.commit()
+        print("Migrated database: added 'phase' column with default value 1")
+        return True
+
+    except Exception as e:
+        print(f"Error during phase column migration: {e}")
+        return False
+    finally:
+        conn.close()

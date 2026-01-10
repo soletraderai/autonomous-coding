@@ -30,10 +30,11 @@ from sqlalchemy.sql.expression import func
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from api.database import Feature, create_database
-from api.migration import migrate_json_to_sqlite
+from api.migration import migrate_json_to_sqlite, migrate_add_phase_column
 
 # Configuration from environment
 PROJECT_DIR = Path(os.environ.get("PROJECT_DIR", ".")).resolve()
+CURRENT_PHASE = int(os.environ.get("CURRENT_PHASE", "1"))
 
 
 # Pydantic models for input validation
@@ -84,6 +85,9 @@ async def server_lifespan(server: FastMCP):
     # Run migration if needed (converts legacy JSON to SQLite)
     migrate_json_to_sqlite(PROJECT_DIR, _session_maker)
 
+    # Run phase column migration for existing databases
+    migrate_add_phase_column(PROJECT_DIR, _session_maker)
+
     yield
 
     # Cleanup
@@ -104,24 +108,28 @@ def get_session():
 
 @mcp.tool()
 def feature_get_stats() -> str:
-    """Get statistics about feature completion progress.
+    """Get statistics about feature completion progress for the current phase.
 
-    Returns the number of passing features, total features, and completion percentage.
-    Use this to track overall progress of the implementation.
+    Returns the number of passing features, total features, and completion percentage
+    for the current phase. Use this to track overall progress of the implementation.
 
     Returns:
-        JSON with: passing (int), total (int), percentage (float)
+        JSON with: passing (int), total (int), percentage (float), phase (int)
     """
     session = get_session()
     try:
-        total = session.query(Feature).count()
-        passing = session.query(Feature).filter(Feature.passes == True).count()
+        total = session.query(Feature).filter(Feature.phase == CURRENT_PHASE).count()
+        passing = session.query(Feature).filter(
+            Feature.passes == True,
+            Feature.phase == CURRENT_PHASE
+        ).count()
         percentage = round((passing / total) * 100, 1) if total > 0 else 0.0
 
         return json.dumps({
             "passing": passing,
             "total": total,
-            "percentage": percentage
+            "percentage": percentage,
+            "phase": CURRENT_PHASE
         }, indent=2)
     finally:
         session.close()
@@ -129,26 +137,31 @@ def feature_get_stats() -> str:
 
 @mcp.tool()
 def feature_get_next() -> str:
-    """Get the highest-priority pending feature to work on.
+    """Get the highest-priority pending feature to work on for the current phase.
 
-    Returns the feature with the lowest priority number that has passes=false.
+    Returns the feature with the lowest priority number that has passes=false
+    within the current phase.
     Use this at the start of each coding session to determine what to implement next.
 
     Returns:
-        JSON with feature details (id, priority, category, name, description, steps, passes)
-        or error message if all features are passing.
+        JSON with feature details (id, priority, category, name, description, steps, passes, phase)
+        or message if all features in this phase are passing.
     """
     session = get_session()
     try:
         feature = (
             session.query(Feature)
-            .filter(Feature.passes == False)
+            .filter(Feature.passes == False, Feature.phase == CURRENT_PHASE)
             .order_by(Feature.priority.asc(), Feature.id.asc())
             .first()
         )
 
         if feature is None:
-            return json.dumps({"error": "All features are passing! No more work to do."})
+            return json.dumps({
+                "message": f"All features in Phase {CURRENT_PHASE} are passing!",
+                "phase": CURRENT_PHASE,
+                "status": "complete"
+            })
 
         return json.dumps(feature.to_dict(), indent=2)
     finally:
@@ -159,9 +172,10 @@ def feature_get_next() -> str:
 def feature_get_for_regression(
     limit: Annotated[int, Field(default=3, ge=1, le=10, description="Maximum number of passing features to return")] = 3
 ) -> str:
-    """Get random passing features for regression testing.
+    """Get random passing features from the current phase for regression testing.
 
-    Returns a random selection of features that are currently passing.
+    Returns a random selection of features that are currently passing
+    within the current phase.
     Use this to verify that previously implemented features still work
     after making changes.
 
@@ -169,13 +183,13 @@ def feature_get_for_regression(
         limit: Maximum number of features to return (1-10, default 3)
 
     Returns:
-        JSON with: features (list of feature objects), count (int)
+        JSON with: features (list of feature objects), count (int), phase (int)
     """
     session = get_session()
     try:
         features = (
             session.query(Feature)
-            .filter(Feature.passes == True)
+            .filter(Feature.passes == True, Feature.phase == CURRENT_PHASE)
             .order_by(func.random())
             .limit(limit)
             .all()
@@ -183,7 +197,8 @@ def feature_get_for_regression(
 
         return json.dumps({
             "features": [f.to_dict() for f in features],
-            "count": len(features)
+            "count": len(features),
+            "phase": CURRENT_PHASE
         }, indent=2)
     finally:
         session.close()
@@ -275,10 +290,10 @@ def feature_skip(
 def feature_create_bulk(
     features: Annotated[list[dict], Field(description="List of features to create, each with category, name, description, and steps")]
 ) -> str:
-    """Create multiple features in a single operation.
+    """Create multiple features for the current phase in a single operation.
 
     Features are assigned sequential priorities based on their order.
-    All features start with passes=false.
+    All features start with passes=false and are assigned to the current phase.
 
     This is typically used by the initializer agent to set up the initial
     feature list from the app specification.
@@ -291,12 +306,17 @@ def feature_create_bulk(
             - steps (list[str]): Implementation/test steps
 
     Returns:
-        JSON with: created (int) - number of features created
+        JSON with: created (int), phase (int) - number of features created and phase
     """
     session = get_session()
     try:
-        # Get the starting priority
-        max_priority_result = session.query(Feature.priority).order_by(Feature.priority.desc()).first()
+        # Get the starting priority for this phase
+        max_priority_result = (
+            session.query(Feature.priority)
+            .filter(Feature.phase == CURRENT_PHASE)
+            .order_by(Feature.priority.desc())
+            .first()
+        )
         start_priority = (max_priority_result[0] + 1) if max_priority_result else 1
 
         created_count = 0
@@ -314,13 +334,17 @@ def feature_create_bulk(
                 description=feature_data["description"],
                 steps=feature_data["steps"],
                 passes=False,
+                phase=CURRENT_PHASE,
             )
             session.add(db_feature)
             created_count += 1
 
         session.commit()
 
-        return json.dumps({"created": created_count}, indent=2)
+        return json.dumps({
+            "created": created_count,
+            "phase": CURRENT_PHASE
+        }, indent=2)
     except Exception as e:
         session.rollback()
         return json.dumps({"error": str(e)})

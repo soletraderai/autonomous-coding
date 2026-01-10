@@ -70,13 +70,14 @@ BUILTIN_TOOLS = [
 ]
 
 
-def create_client(project_dir: Path, model: str):
+def create_client(project_dir: Path, model: str, phase: int = 1):
     """
     Create a Claude Agent SDK client with multi-layered security.
 
     Args:
         project_dir: Directory for the project
         model: Claude model to use
+        phase: Current phase number (passed to MCP server, default: 1)
 
     Returns:
         Configured ClaudeSDKClient (from claude_agent_sdk)
@@ -150,6 +151,7 @@ def create_client(project_dir: Path, model: str):
                     "env": {
                         "PROJECT_DIR": str(project_dir.resolve()),
                         "PYTHONPATH": str(Path(__file__).parent.resolve()),
+                        "CURRENT_PHASE": str(phase),
                     },
                 },
             },

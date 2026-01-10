@@ -18,26 +18,29 @@ WEBHOOK_URL = os.environ.get("PROGRESS_N8N_WEBHOOK_URL")
 PROGRESS_CACHE_FILE = ".progress_cache"
 
 
-def has_features(project_dir: Path) -> bool:
+def has_features(project_dir: Path, phase: int = 1) -> bool:
     """
-    Check if the project has features in the database.
+    Check if the project has features in the database for a specific phase.
 
     This is used to determine if the initializer agent needs to run.
     We check the database directly (not via API) since the API server
     may not be running yet when this check is performed.
 
+    Args:
+        project_dir: Path to the project directory
+        phase: Phase number to check (default: 1)
+
     Returns True if:
-    - features.db exists AND has at least 1 feature, OR
-    - feature_list.json exists (legacy format)
+    - features.db exists AND has at least 1 feature for the given phase, OR
+    - feature_list.json exists (legacy format, assumes phase 1)
 
-    Returns False if no features exist (initializer needs to run).
+    Returns False if no features exist for the phase (initializer needs to run).
     """
-    import sqlite3
-
-    # Check legacy JSON file first
-    json_file = project_dir / "feature_list.json"
-    if json_file.exists():
-        return True
+    # Check legacy JSON file first (only valid for phase 1)
+    if phase == 1:
+        json_file = project_dir / "feature_list.json"
+        if json_file.exists():
+            return True
 
     # Check SQLite database
     db_file = project_dir / "features.db"
@@ -47,7 +50,20 @@ def has_features(project_dir: Path) -> bool:
     try:
         conn = sqlite3.connect(db_file)
         cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM features")
+
+        # Check for phase column existence
+        cursor.execute("PRAGMA table_info(features)")
+        columns = [col[1] for col in cursor.fetchall()]
+
+        if "phase" in columns:
+            cursor.execute("SELECT COUNT(*) FROM features WHERE phase = ?", (phase,))
+        else:
+            # Legacy database without phase column
+            if phase != 1:
+                conn.close()
+                return False
+            cursor.execute("SELECT COUNT(*) FROM features")
+
         count = cursor.fetchone()[0]
         conn.close()
         return count > 0
@@ -56,12 +72,13 @@ def has_features(project_dir: Path) -> bool:
         return False
 
 
-def count_passing_tests(project_dir: Path) -> tuple[int, int]:
+def count_passing_tests(project_dir: Path, phase: int | None = None) -> tuple[int, int]:
     """
     Count passing and total tests via direct database access.
 
     Args:
         project_dir: Directory containing the project
+        phase: Optional phase number to filter by. If None, counts all phases.
 
     Returns:
         (passing_count, total_count)
@@ -73,15 +90,71 @@ def count_passing_tests(project_dir: Path) -> tuple[int, int]:
     try:
         conn = sqlite3.connect(db_file)
         cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM features")
-        total = cursor.fetchone()[0]
-        cursor.execute("SELECT COUNT(*) FROM features WHERE passes = 1")
-        passing = cursor.fetchone()[0]
+
+        # Check for phase column existence
+        cursor.execute("PRAGMA table_info(features)")
+        columns = [col[1] for col in cursor.fetchall()]
+        has_phase_column = "phase" in columns
+
+        if phase is not None and has_phase_column:
+            cursor.execute("SELECT COUNT(*) FROM features WHERE phase = ?", (phase,))
+            total = cursor.fetchone()[0]
+            cursor.execute("SELECT COUNT(*) FROM features WHERE passes = 1 AND phase = ?", (phase,))
+            passing = cursor.fetchone()[0]
+        else:
+            cursor.execute("SELECT COUNT(*) FROM features")
+            total = cursor.fetchone()[0]
+            cursor.execute("SELECT COUNT(*) FROM features WHERE passes = 1")
+            passing = cursor.fetchone()[0]
+
         conn.close()
         return passing, total
     except Exception as e:
         print(f"[Database error in count_passing_tests: {e}]")
         return 0, 0
+
+
+def is_phase_complete(project_dir: Path, phase: int) -> bool:
+    """
+    Check if all features in a phase are passing.
+
+    Args:
+        project_dir: Directory containing the project
+        phase: Phase number to check
+
+    Returns:
+        True if all features in the phase are passing.
+        Returns False if the phase has no features.
+    """
+    passing, total = count_passing_tests(project_dir, phase=phase)
+    return total > 0 and passing == total
+
+
+def get_current_phase(project_dir: Path) -> int:
+    """
+    Determine the current active phase based on feature completion.
+
+    Scans phases 1 through N to find the first incomplete phase.
+
+    Args:
+        project_dir: Directory containing the project
+
+    Returns:
+        The first phase that is not complete, or 1 if no features exist.
+    """
+    phase = 1
+    while True:
+        if not has_features(project_dir, phase):
+            return max(1, phase - 1) if phase > 1 else 1
+
+        if not is_phase_complete(project_dir, phase):
+            return phase
+
+        phase += 1
+
+        # Safety limit
+        if phase > 100:
+            return phase - 1
 
 
 def get_all_passing_features(project_dir: Path) -> list[dict]:
@@ -203,13 +276,19 @@ def print_session_header(session_num: int, is_initializer: bool) -> None:
     print()
 
 
-def print_progress_summary(project_dir: Path) -> None:
-    """Print a summary of current progress."""
-    passing, total = count_passing_tests(project_dir)
+def print_progress_summary(project_dir: Path, phase: int | None = None) -> None:
+    """Print a summary of current progress.
 
+    Args:
+        project_dir: Directory containing the project
+        phase: Optional phase number to filter by. If None, shows all phases.
+    """
+    passing, total = count_passing_tests(project_dir, phase=phase)
+
+    phase_str = f" (Phase {phase})" if phase else ""
     if total > 0:
         percentage = (passing / total) * 100
-        print(f"\nProgress: {passing}/{total} tests passing ({percentage:.1f}%)")
+        print(f"\nProgress{phase_str}: {passing}/{total} tests passing ({percentage:.1f}%)")
         send_progress_webhook(passing, total, project_dir)
     else:
-        print("\nProgress: No features in database yet")
+        print(f"\nProgress{phase_str}: No features in database yet")
