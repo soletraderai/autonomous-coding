@@ -32,18 +32,23 @@ echo -e "${BOLD}${BLUE}       UPSTREAM CHANGE DETECTOR & ANALYZER           ${NC
 echo -e "${BOLD}${BLUE}=====================================================${NC}"
 echo ""
 
+# Check if upstream remote exists
+if ! git remote | grep -q "^upstream$"; then
+    echo -e "${YELLOW}Setting up upstream remote...${NC}"
+    git remote add upstream https://github.com/leonvanzyl/autonomous-coding.git
+fi
+
 # Get current branch
 CURRENT_BRANCH=$(git branch --show-current)
 echo -e "${CYAN}Current branch:${NC} $CURRENT_BRANCH"
-echo -e "${CYAN}Custom branch:${NC} soletrader-main"
 echo ""
 
 # Fetch upstream
 echo -e "${YELLOW}Fetching upstream changes...${NC}"
 git fetch upstream --quiet
 
-# Count new commits
-NEW_COMMITS=$(git rev-list master..upstream/master --count 2>/dev/null || echo "0")
+# Count new commits from upstream that we don't have
+NEW_COMMITS=$(git rev-list HEAD..upstream/master --count 2>/dev/null || echo "0")
 
 if [ "$NEW_COMMITS" -eq "0" ]; then
     echo ""
@@ -60,15 +65,15 @@ echo -e "${RED}${BOLD}Found $NEW_COMMITS new commit(s) in upstream!${NC}"
 echo ""
 
 # Show new commits
-echo -e "${BOLD}${CYAN}New Commits:${NC}"
+echo -e "${BOLD}${CYAN}New Commits from Leon's repo:${NC}"
 echo -e "${CYAN}-----------------------------------------------------${NC}"
-git log master..upstream/master --format="  %C(yellow)%h%C(reset) - %s %C(dim)(%cr by %an)%C(reset)"
+git log HEAD..upstream/master --format="  %C(yellow)%h%C(reset) - %s %C(dim)(%cr by %an)%C(reset)"
 echo ""
 
 # Show files changed
 echo -e "${BOLD}${CYAN}Files Changed:${NC}"
 echo -e "${CYAN}-----------------------------------------------------${NC}"
-git diff master..upstream/master --stat | head -20
+git diff HEAD..upstream/master --stat | head -20
 echo ""
 
 # Detailed analysis
@@ -77,45 +82,44 @@ if [ "$DETAILED" = true ]; then
     echo -e "${CYAN}-----------------------------------------------------${NC}"
 
     # Get list of changed files
-    CHANGED_FILES=$(git diff master..upstream/master --name-only)
+    CHANGED_FILES=$(git diff HEAD..upstream/master --name-only)
 
     for file in $CHANGED_FILES; do
         echo ""
         echo -e "${BOLD}${YELLOW}File: $file${NC}"
 
-        # Check if this file exists in soletrader-main and differs from master
-        if git show soletrader-main:"$file" &>/dev/null 2>&1; then
-            CUSTOM_DIFF=$(git diff master..soletrader-main -- "$file" 2>/dev/null | wc -l)
-            if [ "$CUSTOM_DIFF" -gt "0" ]; then
-                echo -e "  ${RED}WARNING: This file has custom modifications in soletrader-main${NC}"
-                echo -e "  ${RED}         Potential merge conflict risk!${NC}"
-            else
-                echo -e "  ${GREEN}No custom modifications - safe to merge${NC}"
-            fi
+        # Check if this file has local modifications compared to upstream's base
+        LOCAL_DIFF=$(git diff upstream/master..HEAD -- "$file" 2>/dev/null | wc -l)
+        if [ "$LOCAL_DIFF" -gt "0" ]; then
+            echo -e "  ${RED}WARNING: This file has local modifications${NC}"
+            echo -e "  ${RED}         Potential merge conflict risk!${NC}"
+        else
+            echo -e "  ${GREEN}No local modifications - safe to merge${NC}"
         fi
 
-        # Show additions/deletions
-        ADDS=$(git diff master..upstream/master -- "$file" | grep -c "^+" || true)
-        DELS=$(git diff master..upstream/master -- "$file" | grep -c "^-" || true)
-        echo -e "  Changes: ${GREEN}+$ADDS${NC} / ${RED}-$DELS${NC} lines"
+        # Show additions/deletions from upstream
+        ADDS=$(git diff HEAD..upstream/master -- "$file" | grep -c "^+" || true)
+        DELS=$(git diff HEAD..upstream/master -- "$file" | grep -c "^-" || true)
+        echo -e "  Upstream changes: ${GREEN}+$ADDS${NC} / ${RED}-$DELS${NC} lines"
     done
     echo ""
 fi
 
-# Cross-check with custom branch
-echo -e "${BOLD}${CYAN}Cross-Check with Your Custom Branch (soletrader-main):${NC}"
+# Cross-check for conflicts
+echo -e "${BOLD}${CYAN}Conflict Analysis:${NC}"
 echo -e "${CYAN}-----------------------------------------------------${NC}"
 
-# Find files that are different in both upstream AND your custom branch
-UPSTREAM_CHANGED=$(git diff master..upstream/master --name-only)
-CUSTOM_CHANGED=$(git diff master..soletrader-main --name-only 2>/dev/null || echo "")
+# Find files that changed in both upstream AND locally
+UPSTREAM_CHANGED=$(git diff HEAD..upstream/master --name-only)
 
 CONFLICT_RISK=0
 SAFE_FILES=0
 
 for file in $UPSTREAM_CHANGED; do
-    if echo "$CUSTOM_CHANGED" | grep -q "^${file}$"; then
-        echo -e "  ${RED}CONFLICT RISK:${NC} $file (modified in both)"
+    # Check if we have local changes to this file
+    LOCAL_CHANGES=$(git diff upstream/master..HEAD -- "$file" 2>/dev/null | wc -l)
+    if [ "$LOCAL_CHANGES" -gt "0" ]; then
+        echo -e "  ${RED}CONFLICT RISK:${NC} $file (modified locally and upstream)"
         ((CONFLICT_RISK++)) || true
     else
         ((SAFE_FILES++)) || true
@@ -136,15 +140,10 @@ echo ""
 
 if [ "$CONFLICT_RISK" -gt "0" ]; then
     echo -e "${YELLOW}1. Review conflicting files before merging:${NC}"
-    echo "   claude"
-    echo "   # Then use the upstream analysis prompt"
+    echo "   ./cross-check.sh --detailed"
     echo ""
-    echo -e "${YELLOW}2. Or view the specific conflicts:${NC}"
-    for file in $UPSTREAM_CHANGED; do
-        if echo "$CUSTOM_CHANGED" | grep -q "^${file}$"; then
-            echo "   git diff master..upstream/master -- $file"
-        fi
-    done
+    echo -e "${YELLOW}2. Or use Claude Code to analyze:${NC}"
+    echo "   claude"
     echo ""
 else
     echo -e "${GREEN}No conflicts detected - safe to merge!${NC}"
@@ -153,15 +152,9 @@ fi
 
 echo -e "${YELLOW}To merge upstream changes:${NC}"
 echo ""
-echo "   # Update master branch first"
-echo "   git checkout master"
-echo "   git pull upstream master"
+echo "   git fetch upstream"
+echo "   git merge upstream/master"
 echo "   git push origin master"
-echo ""
-echo "   # Then merge into your custom branch"
-echo "   git checkout soletrader-main"
-echo "   git merge master"
-echo "   git push origin soletrader-main"
 echo ""
 
 echo -e "${BOLD}${BLUE}=====================================================${NC}"
