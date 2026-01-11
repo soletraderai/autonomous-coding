@@ -9,12 +9,75 @@ Fallback chain:
 2. Base template: .claude/templates/{name}.template.md
 """
 
+from __future__ import annotations
+
 import shutil
 from pathlib import Path
+from typing import Optional
 
 
 # Base templates location (generic templates)
 TEMPLATES_DIR = Path(__file__).parent / ".claude" / "templates"
+
+# System root directory (where VERSION file lives)
+SYSTEM_ROOT = Path(__file__).parent
+
+
+def get_system_version() -> str:
+    """
+    Get the current system version from the VERSION file.
+
+    Returns:
+        Version string (e.g., "1.0.0"), or "unknown" if VERSION file not found
+    """
+    version_file = SYSTEM_ROOT / "VERSION"
+    if version_file.exists():
+        try:
+            return version_file.read_text(encoding="utf-8").strip()
+        except (OSError, PermissionError):
+            pass
+    return "unknown"
+
+
+def get_project_version(project_dir: Path) -> str | None:
+    """
+    Get the version a project was created with.
+
+    Args:
+        project_dir: The project directory
+
+    Returns:
+        Version string if .version file exists, None otherwise
+    """
+    version_file = project_dir / ".version"
+    if version_file.exists():
+        try:
+            return version_file.read_text(encoding="utf-8").strip()
+        except (OSError, PermissionError):
+            pass
+    return None
+
+
+def stamp_project_version(project_dir: Path) -> None:
+    """
+    Stamp a project with the current system version.
+
+    Creates a .version file in the project directory with the current
+    system version. Only stamps if no .version file exists.
+
+    Args:
+        project_dir: The project directory
+    """
+    version_file = project_dir / ".version"
+    if version_file.exists():
+        return  # Already stamped
+
+    version = get_system_version()
+    try:
+        version_file.write_text(version + "\n", encoding="utf-8")
+        print(f"  Stamped project with version: {version}")
+    except (OSError, PermissionError) as e:
+        print(f"  Warning: Could not stamp version: {e}")
 
 
 def get_project_prompts_dir(project_dir: Path) -> Path:
@@ -193,6 +256,7 @@ def scaffold_project_prompts(project_dir: Path) -> Path:
     Create the project prompts directory and copy base templates.
 
     This sets up a new project with template files that can be customized.
+    Also stamps the project with the current system version.
 
     Args:
         project_dir: The project directory (e.g., generations/my-app)
@@ -202,6 +266,9 @@ def scaffold_project_prompts(project_dir: Path) -> Path:
     """
     project_prompts = get_project_prompts_dir(project_dir)
     project_prompts.mkdir(parents=True, exist_ok=True)
+
+    # Stamp project with current system version
+    stamp_project_version(project_dir)
 
     # Define template mappings: (source_template, destination_name)
     templates = [
