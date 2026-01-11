@@ -133,3 +133,42 @@ The system uses semantic versioning to track compatibility between the system an
 2. Read CHANGELOG.md for migration notes between versions
 3. Apply migrations as needed
 4. Update `.version` file to current version
+
+### Versioning Workflow (IMPORTANT)
+
+**When making changes to this repo, you MUST update versioning:**
+
+1. **Determine version bump type:**
+   - `PATCH` (1.0.0 → 1.0.1): Bug fixes, documentation, minor tweaks
+   - `MINOR` (1.0.0 → 1.1.0): New features, new MCP tools, new prompt capabilities
+   - `MAJOR` (1.0.0 → 2.0.0): Breaking changes (DB schema, removed features, prompt format changes)
+
+2. **Update these files:**
+   - `VERSION` - Update the version number
+   - `CHANGELOG.md` - Add entry under `[Unreleased]` section with:
+     - What changed (Added/Changed/Fixed/Removed)
+     - Migration notes if projects need updates
+
+3. **Breaking changes require migration notes:**
+   - If DB schema changes: Document migration steps
+   - If MCP tools change: Document old vs new tool names
+   - If prompts change: Note what projects need to update
+
+4. **Before committing, verify:**
+   - [ ] VERSION file updated
+   - [ ] CHANGELOG.md has entry for this change
+   - [ ] Migration notes added if breaking change
+
+**Example CHANGELOG entry:**
+```markdown
+## [Unreleased]
+
+### Added
+- New `feature_foo` MCP tool for X functionality
+
+### Changed
+- Updated `coding_prompt.template.md` to include Y
+
+### Migration
+- Projects using custom prompts should add Y to their prompts
+```
