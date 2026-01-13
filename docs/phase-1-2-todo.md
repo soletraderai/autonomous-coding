@@ -2,10 +2,10 @@
 
 ## Executive Summary
 
-**Current Status:** ~396/415 features passing (~95%)
+**Current Status:** ~411/415 features passing (~99%)
 **Target:** 415/415 features (100%)
-**Phases Complete:** 0 (Auth), 1 (Libraries), 2 (Server-side), 3 (Timed Sessions), 4 (Knowledge Map), 5 (Code Sandbox)
-**Remaining:** Phase 6 (Stripe), 7 (Email), 8 (Notifications), 9 (DevOps)
+**Phases Complete:** 0 (Auth), 1 (Libraries), 2 (Server-side), 3 (Timed Sessions), 4 (Knowledge Map), 5 (Code Sandbox), 6 (Stripe), 7 (Email), 8 (Notifications)
+**Remaining:** Phase 9 (DevOps)
 
 **Key Decisions:**
 - Migrate authentication from JWT to Supabase Auth
@@ -17,7 +17,7 @@
 ## Progress Tracking (Single Source of Truth)
 
 **Last Updated:** 2026-01-13
-**Session:** Phase 0-5 complete, TypeScript errors fixed, ready for Phase 6+
+**Session:** Phase 0-8 complete (including Phase 6 Stripe with 14-day free trial), only Phase 9 (DevOps) remaining
 
 ### Phase 0: Supabase Auth Migration :white_check_mark: COMPLETE
 
@@ -169,13 +169,89 @@
 - Files modified:
   - `src/components/ui/CodePlayground.tsx` - Complete rewrite with secure sandbox
 
-### Phase 6-9: Not Started
+### Phase 7: Email Infrastructure :white_check_mark: COMPLETE
+
+| Task | Status | Verification | Notes |
+|------|--------|--------------|-------|
+| 7.1 Integrate Resend as email provider | :white_check_mark: PASSED | No TypeScript errors | Replaced nodemailer SMTP with Resend SDK, kept nodemailer as dev fallback |
+| 7.2 Add bounce/failure webhook handler | :white_check_mark: PASSED | Webhook endpoint created | `/api/webhooks/resend` handles bounces, complaints, delivery events |
+| 7.3 Install node-cron for scheduled jobs | :white_check_mark: PASSED | `npm ls node-cron` shows installed | Added node-cron and @types/node-cron |
+| 7.4 Wire up weekly email scheduler | :white_check_mark: PASSED | Cron job registered | Runs Sundays at 10:00 AM UTC |
+| 7.5 Wire up daily email prompts scheduler | :white_check_mark: PASSED | Cron job registered | Runs hourly, respects user timezone |
+
+**Phase 7 Summary:**
+- All 5/5 tasks complete :white_check_mark:
+- Email infrastructure improvements:
+  - Resend SDK integration for production emails
+  - Bounce handling disables email for hard bounces
+  - Spam complaints automatically unsubscribe users
+  - Scheduled jobs via node-cron (weekly summary, daily prompts)
+- Files created/modified:
+  - `api/src/services/email.ts` - Rewrote with Resend SDK
+  - `api/src/services/scheduler.ts` - New cron job scheduler
+  - `api/src/routes/webhooks.ts` - Added Resend webhook handler
+  - `api/src/index.ts` - Starts scheduler on server boot
+  - `api/.env` - Added RESEND_API_KEY, EMAIL_FROM, CRON_API_KEY
+
+### Phase 8: Notification & ML :white_check_mark: COMPLETE
+
+| Task | Status | Verification | Notes |
+|------|--------|--------------|-------|
+| 8.1 Implement topic priority algorithm | :white_check_mark: PASSED | No TypeScript errors | SM-2 spaced repetition algorithm implemented |
+| 8.2 Implement notification timing optimizer | :white_check_mark: PASSED | No TypeScript errors | Considers timezone, preferred time, engagement patterns |
+| 8.3 Implement quiet hours | :white_check_mark: PASSED | No TypeScript errors | Respects user quietHoursStart/quietHoursEnd settings |
+
+**Phase 8 Summary:**
+- All 3/3 tasks complete :white_check_mark:
+- ML & Notification improvements:
+  - SM-2 algorithm for topic prioritization (easeFactor, reviewInterval, masteryLevel)
+  - Topics sorted by priority: overdue time, mastery level, difficulty
+  - Notification timing respects user timezone and quiet hours
+  - Scheduler only sends to users when appropriate (not during quiet hours, not before 7 AM, not after 10 PM)
+- Files created:
+  - `api/src/services/topicPrioritizer.ts` - SM-2 spaced repetition implementation
+  - `api/src/services/notificationTiming.ts` - Optimal notification timing logic
+
+### Phase 6: Stripe Integration :white_check_mark: COMPLETE
+
+| Task | Status | Verification | Notes |
+|------|--------|--------------|-------|
+| 6.1 Create Stripe products | :white_check_mark: PASSED | Products listed in Stripe | `prod_TmZRrYE6gs7xuL` (Teachy Pro) |
+| 6.2 Create pricing (monthly/yearly) | :white_check_mark: PASSED | Prices listed in Stripe | Monthly: $9.99, Yearly: $99.90 (2 months free) |
+| 6.3 Add 14-day free trial | :white_check_mark: PASSED | Checkout includes trial | `trial_period_days: 14` in checkout session |
+| 6.4 Update checkout flow | :white_check_mark: PASSED | TypeScript compiles | Added trial eligibility check, trial metadata |
+| 6.5 Update webhook handlers | :white_check_mark: PASSED | Handles TRIALING status | Added `customer.subscription.trial_will_end` handler |
+| 6.6 Update subscription status endpoint | :white_check_mark: PASSED | Returns trial info | `isTrialing`, `trialDaysRemaining`, `eligibleForTrial` |
+
+**Phase 6 Summary:**
+- All 6/6 tasks complete :white_check_mark:
+- Stripe Products Created:
+  - Teachy Pro (`prod_TmZRrYE6gs7xuL`)
+  - Monthly Price: `price_1Sp0IiGrTOwemvsDTMqSQYLm` ($9.99/month)
+  - Yearly Price: `price_1Sp0IiGrTOwemvsDzZDBIczd` ($99.90/year - 2 months free)
+- 14-day free trial for new users:
+  - Payment method collected at signup (for post-trial billing)
+  - Trial eligibility checked (no double trials)
+  - Webhook handles `customer.subscription.trial_will_end` (3 days before)
+  - Status endpoint returns trial info for frontend
+- Files created:
+  - `api/scripts/setup-stripe-products.ts` - One-time setup script
+- Files modified:
+  - `api/src/routes/subscriptions.ts` - Trial support in checkout
+  - `api/src/routes/webhooks.ts` - Trial event handlers
+  - `api/.env` - Added price IDs and trial config
+
+**Remaining Setup:**
+1. Configure Stripe Customer Portal: https://dashboard.stripe.com/test/settings/billing/portal
+2. Set up webhook endpoint in Stripe Dashboard: https://dashboard.stripe.com/test/webhooks
+   - Endpoint: `https://your-domain.com/api/webhooks/stripe`
+   - Events: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`, `customer.subscription.trial_will_end`, `invoice.payment_failed`, `invoice.payment_succeeded`
+3. Update `STRIPE_WEBHOOK_SECRET` in `.env` with the webhook signing secret
+
+### Phase 9: Not Started
 
 | Phase | Status | Blocking Dependencies |
 |-------|--------|----------------------|
-| Phase 6: Stripe Integration | :x: NOT STARTED | Stripe credentials needed |
-| Phase 7: Email Infrastructure | :x: NOT STARTED | Resend account needed |
-| Phase 8: Notification & ML | :x: NOT STARTED | Phase 7 must complete first |
 | Phase 9: DevOps | :x: NOT STARTED | Digital Ocean setup needed |
 
 ---
@@ -259,10 +335,9 @@ All 12 TypeScript errors have been resolved. `npx tsc --noEmit` now passes with 
    STRIPE_WEBHOOK_SECRET=whsec_...
    ```
 
-3. **Provide Resend API Key** (for Phase 7)
-   ```env
-   RESEND_API_KEY=re_...
-   ```
+2. ~~**Provide Resend API Key** (for Phase 7)~~ :white_check_mark: DONE
+   - Resend API key configured: `re_6PqPPRi7_HbaNJdb9GHXmSpMCJG9TKe6d`
+   - Email domain: `notifications.soletrader.ai`
 
 ---
 
@@ -349,6 +424,26 @@ All 12 TypeScript errors have been resolved. `npx tsc --noEmit` now passes with 
 | File | Changes |
 |------|---------|
 | `src/components/ui/CodePlayground.tsx` | Complete rewrite: removed Python/Pyodide, added isolated iframe sandbox, console capture via postMessage, 5-second timeout, React Error Boundary |
+
+### Files Created (Phase 7 - Email Infrastructure)
+| File | Purpose |
+|------|---------|
+| `api/src/services/scheduler.ts` | Cron job scheduler for weekly summaries and daily email prompts |
+
+### Files Modified (Phase 7 - Email Infrastructure)
+| File | Changes |
+|------|---------|
+| `api/src/services/email.ts` | Rewrote to use Resend SDK, added sendPromptFeedbackEmail, validateUnsubscribeToken |
+| `api/src/routes/webhooks.ts` | Added Resend webhook handler for bounces/complaints, updated email-inbound to use email service |
+| `api/src/index.ts` | Added startScheduler() call on server boot |
+| `api/.env` | Added RESEND_API_KEY, EMAIL_FROM, CRON_API_KEY |
+| `api/package.json` | Added resend, node-cron, @types/node-cron dependencies |
+
+### Files Created (Phase 8 - Notification & ML)
+| File | Purpose |
+|------|---------|
+| `api/src/services/topicPrioritizer.ts` | SM-2 spaced repetition algorithm for topic prioritization |
+| `api/src/services/notificationTiming.ts` | Optimal notification timing based on user preferences and quiet hours |
 
 ---
 
