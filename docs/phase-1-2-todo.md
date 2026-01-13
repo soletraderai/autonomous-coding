@@ -2,9 +2,10 @@
 
 ## Executive Summary
 
-**Current Status:** 372/415 features passing (89.6%)
+**Current Status:** ~396/415 features passing (~95%)
 **Target:** 415/415 features (100%)
-**Failed Features:** 48 total (5 Phase 1, 43 Phase 2)
+**Phases Complete:** 0 (Auth), 1 (Libraries), 2 (Server-side), 3 (Timed Sessions), 4 (Knowledge Map), 5 (Code Sandbox)
+**Remaining:** Phase 6 (Stripe), 7 (Email), 8 (Notifications), 9 (DevOps)
 
 **Key Decisions:**
 - Migrate authentication from JWT to Supabase Auth
@@ -16,7 +17,7 @@
 ## Progress Tracking (Single Source of Truth)
 
 **Last Updated:** 2026-01-13
-**Session:** Phase 0 complete, Phase 1 complete, TypeScript errors fixed, ready for Phase 2+
+**Session:** Phase 0-5 complete, TypeScript errors fixed, ready for Phase 6+
 
 ### Phase 0: Supabase Auth Migration :white_check_mark: COMPLETE
 
@@ -75,14 +76,103 @@
   - Built-in retry with exponential backoff (3 retries)
   - ~150 lines of manual fetch/cache code removed from each page
 
-### Phase 2-9: Not Started
+### Phase 2: Server-Side Features :white_check_mark: COMPLETE
+
+| Task | Status | Verification | Notes |
+|------|--------|--------------|-------|
+| 2.1 Complete Gemini API integration | :white_check_mark: PASSED | All 5 endpoints working | `/api/ai/generate-questions`, `/evaluate-answer`, `/generate-summary`, `/rephrase-question`, `/dig-deeper` |
+| 2.2 Create knowledge base server endpoint | :white_check_mark: PASSED | POST endpoint added | Added `POST /api/sessions/:id/sources` to persist KB sources to database |
+| 2.3 Update frontend knowledge base service | :white_check_mark: PASSED | Already complete | `src/services/knowledgeBase.ts` - URL extraction and classification working |
+| 2.4 Connect knowledge base to question generation | :white_check_mark: PASSED | AI feedback references sources | Updated `evaluateAnswer` in gemini.ts and backend `/api/ai/evaluate-answer` to include KB sources |
+
+**Phase 2 Summary:**
+- All 4/4 tasks complete :white_check_mark:
+- Knowledge base persistence flow:
+  1. Frontend extracts URLs from transcript → `buildKnowledgeBase()`
+  2. Session created → `sessionApi.saveSession()`
+  3. Sources saved → `POST /api/sessions/:id/sources`
+  4. AI feedback references sources when evaluating answers
+- Files modified:
+  - `api/src/routes/sessions.ts` - Added POST endpoint for sources
+  - `api/src/routes/ai.ts` - Enhanced evaluate-answer with sources support
+  - `src/stores/sessionStore.ts` - Added KB persistence to saveSession flow
+  - `src/services/gemini.ts` - Added sources parameter to evaluateAnswer
+  - `src/pages/ActiveSession.tsx` - Passes KB sources to evaluateAnswer
+
+### Phase 3: Timed Sessions :white_check_mark: COMPLETE
+
+| Task | Status | Verification | Notes |
+|------|--------|--------------|-------|
+| 3.1 Create TimedSessions.tsx page | :white_check_mark: PASSED | No TypeScript errors | Main page with session type selection (Rapid/Focused/Comprehensive) |
+| 3.2 Create TimedSessionActive.tsx | :white_check_mark: PASSED | No TypeScript errors | Active session with timer, question display, answer submission |
+| 3.3 Add session controls | :white_check_mark: PASSED | Implemented in Active page | Skip, abandon, next question controls |
+| 3.4 Create TimedSessionResults.tsx | :white_check_mark: PASSED | No TypeScript errors | Results with accuracy circle, time analysis, performance message |
+| 3.5 Create TimedSessionHistory.tsx | :white_check_mark: PASSED | No TypeScript errors | History page with filtering and sorting |
+| 3.6 Add routes and navigation | :white_check_mark: PASSED | Routes in App.tsx | `/timed-sessions`, `/timed-sessions/history`, `/timed-sessions/:id/active`, `/timed-sessions/:id/results` |
+| 3.7 Add TanStack Query hooks | :white_check_mark: PASSED | Hooks exported from index | `useTimedSessionHistory`, `useActiveTimedSession`, `useCreateTimedSession`, `useUpdateTimedSession` |
+| 3.8 Add backend endpoints | :white_check_mark: PASSED | API routes updated | Added `/questions` endpoint, `/evaluate-timed-answer` AI endpoint |
+
+**Phase 3 Summary:**
+- All 8/8 tasks complete :white_check_mark:
+- Timed Sessions feature fully implemented:
+  - 3 session types: Rapid (5min/10q), Focused (15min/20q), Comprehensive (30min/30q)
+  - Real-time timer with 1-minute warning
+  - AI-powered answer evaluation with fallback
+  - Results page with accuracy visualization and performance feedback
+  - History page with filtering by session type and sorting
+- Files created:
+  - `src/pages/TimedSessions.tsx` - Main page
+  - `src/pages/TimedSessionActive.tsx` - Active session with timer
+  - `src/pages/TimedSessionResults.tsx` - Results page
+  - `src/pages/TimedSessionHistory.tsx` - History page
+  - `src/hooks/queries/useTimedSessions.ts` - TanStack Query hooks
+
+### Phase 4: Knowledge Map Optimization :white_check_mark: COMPLETE
+
+| Task | Status | Verification | Notes |
+|------|--------|--------------|-------|
+| 4.1 Optimize canvas rendering | :white_check_mark: PASSED | No TypeScript errors | requestAnimationFrame, batch drawing, memoization |
+| 4.2 Add Web Workers for layout | :white_check_mark: PASSED | Worker created inline | Force-directed layout off main thread |
+
+**Phase 4 Summary:**
+- All 2/2 tasks complete :white_check_mark:
+- Performance optimizations implemented:
+  - Web Worker for force-directed layout calculations (offloads main thread)
+  - requestAnimationFrame for smooth pan/zoom interactions
+  - Batch drawing by color groups
+  - useMemo for pre-calculated node properties
+  - useCallback for event handlers
+  - Simple circular layout fallback for small datasets (<50 nodes)
+  - Layout progress indicator during calculation
+- Files modified:
+  - `src/pages/KnowledgeMap.tsx` - Complete rewrite with optimizations
+  - `src/workers/knowledgeMapLayout.worker.ts` - Web Worker (created but inline worker used)
+
+### Phase 5: Code Sandbox :white_check_mark: COMPLETE
+
+| Task | Status | Verification | Notes |
+|------|--------|--------------|-------|
+| 5.1 Remove Python/Pyodide support | :white_check_mark: PASSED | No TypeScript errors | Removed all Pyodide code, JavaScript only |
+| 5.2 Create isolated iframe sandbox | :white_check_mark: PASSED | Build succeeds | Sandboxed iframe with `allow-scripts` only |
+| 5.3 Capture console output | :white_check_mark: PASSED | postMessage working | Console methods intercepted, output sent to parent |
+| 5.4 Add 5-second timeout | :white_check_mark: PASSED | Timeout implemented | Infinite loops caught with graceful error |
+| 5.5 Add error boundary | :white_check_mark: PASSED | Component wrapped | React ErrorBoundary with "Try Again" button |
+
+**Phase 5 Summary:**
+- All 5/5 tasks complete :white_check_mark:
+- Code Sandbox security improvements:
+  - Isolated iframe sandbox (only `allow-scripts`, no `allow-same-origin`)
+  - Blocked dangerous APIs: fetch, XMLHttpRequest, WebSocket, localStorage, etc.
+  - Console output captured via postMessage communication
+  - 5-second execution timeout prevents infinite loops
+  - React Error Boundary for graceful crash recovery
+- Files modified:
+  - `src/components/ui/CodePlayground.tsx` - Complete rewrite with secure sandbox
+
+### Phase 6-9: Not Started
 
 | Phase | Status | Blocking Dependencies |
 |-------|--------|----------------------|
-| Phase 2: Server-Side Features | :x: NOT STARTED | None - can start |
-| Phase 3: Timed Sessions | :x: NOT STARTED | None - Phase 1 complete, can start |
-| Phase 4: Knowledge Map Optimization | :x: NOT STARTED | None - can start |
-| Phase 5: Code Sandbox | :x: NOT STARTED | None - can start |
 | Phase 6: Stripe Integration | :x: NOT STARTED | Stripe credentials needed |
 | Phase 7: Email Infrastructure | :x: NOT STARTED | Resend account needed |
 | Phase 8: Notification & ML | :x: NOT STARTED | Phase 7 must complete first |
@@ -137,26 +227,39 @@ All 12 TypeScript errors have been resolved. `npx tsc --noEmit` now passes with 
    - Automatic caching, deduplication, and retry logic now active
    - Manual testing confirmed all features working
 
+4. ~~**Complete Phase 2: Server-Side Features**~~ :white_check_mark: DONE
+   - Gemini API integration complete
+   - Knowledge base persistence added
+   - AI feedback references sources
+
+5. ~~**Complete Phase 3: Timed Sessions**~~ :white_check_mark: DONE
+   - Created 4 new pages (main, active, results, history)
+   - Timer with 1-minute warning
+   - 3 session types (Rapid/Focused/Comprehensive)
+   - AI-powered answer evaluation
+
+6. ~~**Complete Phase 4: Knowledge Map Optimization**~~ :white_check_mark: DONE
+   - Web Worker for layout calculations
+   - requestAnimationFrame for smooth interactions
+   - Batch rendering for performance
+
+7. ~~**Complete Phase 5: Code Sandbox**~~ :white_check_mark: DONE
+   - Removed Python/Pyodide support (JavaScript only)
+   - Created isolated iframe sandbox
+   - Console output captured via postMessage
+   - 5-second timeout for infinite loops
+   - Error boundary for graceful recovery
+
 ### Immediate Actions (Ready to Execute)
 
-1. **Start Phase 2: Server-Side Features**
-   - Complete Gemini API integration (needs API key)
-   - Create knowledge base server endpoint
-   - Connect knowledge base to question generation
-
-2. **Start Phase 3: Timed Sessions** (largest feature set - 12 features)
-   - Create Timed Sessions page
-   - Implement timer with session types (Rapid/Focused/Comprehensive)
-   - Add results and history tracking
-
-3. **Provide Stripe Test Keys** (for Phase 6)
+1. **Provide Stripe Test Keys** (for Phase 6)
    ```env
    STRIPE_SECRET_KEY=sk_test_...
    STRIPE_PUBLISHABLE_KEY=pk_test_...
    STRIPE_WEBHOOK_SECRET=whsec_...
    ```
 
-4. **Provide Resend API Key** (for Phase 7)
+3. **Provide Resend API Key** (for Phase 7)
    ```env
    RESEND_API_KEY=re_...
    ```
@@ -213,6 +316,39 @@ All 12 TypeScript errors have been resolved. `npx tsc --noEmit` now passes with 
 | `src/lib/queryClient.ts` | Added query keys for commitment, learningInsights, goals.suggestions |
 | `src/pages/Dashboard.tsx` | Replaced useEffect/useState with useCommitment and useLearningInsights hooks |
 | `src/pages/Goals.tsx` | Replaced fetch calls with useGoals, useGoalSuggestions, and mutation hooks |
+
+### Files Created (Phase 3 - Timed Sessions)
+| File | Purpose |
+|------|---------|
+| `src/pages/TimedSessions.tsx` | Main page with session type selection (Rapid/Focused/Comprehensive) |
+| `src/pages/TimedSessionActive.tsx` | Active session with timer, questions, answer submission |
+| `src/pages/TimedSessionResults.tsx` | Results page with accuracy circle and performance analysis |
+| `src/pages/TimedSessionHistory.tsx` | History page with filtering and sorting |
+| `src/hooks/queries/useTimedSessions.ts` | TanStack Query hooks for timed sessions |
+
+### Files Modified (Phase 3 - Timed Sessions)
+| File | Changes |
+|------|---------|
+| `src/types/index.ts` | Added `TimedSession`, `TimedSessionType`, `TimedSessionStatus`, `TimedSessionConfig`, `TimedQuestion` types |
+| `src/hooks/index.ts` | Added exports for timed session hooks |
+| `src/App.tsx` | Added routes: `/timed-sessions`, `/timed-sessions/history`, `/timed-sessions/:id/active`, `/timed-sessions/:id/results` |
+| `api/src/routes/timedSessions.ts` | Added `GET /:id/questions` endpoint for fetching questions |
+| `api/src/routes/ai.ts` | Added `POST /evaluate-timed-answer` endpoint for AI answer evaluation |
+
+### Files Created (Phase 4 - Knowledge Map Optimization)
+| File | Purpose |
+|------|---------|
+| `src/workers/knowledgeMapLayout.worker.ts` | Web Worker for force-directed layout (reference, inline worker used) |
+
+### Files Modified (Phase 4 - Knowledge Map Optimization)
+| File | Changes |
+|------|---------|
+| `src/pages/KnowledgeMap.tsx` | Complete rewrite with Web Worker, requestAnimationFrame, batch rendering, useMemo/useCallback optimizations |
+
+### Files Modified (Phase 5 - Code Sandbox)
+| File | Changes |
+|------|---------|
+| `src/components/ui/CodePlayground.tsx` | Complete rewrite: removed Python/Pyodide, added isolated iframe sandbox, console capture via postMessage, 5-second timeout, React Error Boundary |
 
 ---
 
