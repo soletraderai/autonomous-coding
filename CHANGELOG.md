@@ -23,6 +23,19 @@ When updating an older project to work with a newer version of this system:
 - VERSION file for system versioning
 - `.version` file stamped in new projects
 
+### Fixed (Teachy App - Phase 4)
+- **AT-1**: Removed redundant Home navigation button from Dashboard sidebar
+- **AT-2**: Fixed Pro tier not registering in UI - added `INITIAL_SESSION` event handling in authStore to fetch fresh user data on page load
+- **AT-3**: Fixed Feed page "Start Learning" navigation - passes `newSession` state to bypass Dashboard redirect
+- **AT-4**: Fixed Start Learning button not working - added `newSession` state flag check in Home.tsx
+- **AT-5**: Removed duplicate "Create First Session" section from Dashboard bottom
+- **AT-6**: Fixed user data not persisting - added automatic `syncWithCloud()` call on auth events and app startup
+
+### Changed (Teachy App)
+- Auth state listener now handles `INITIAL_SESSION` event for page load with persisted sessions
+- Token refresh now also updates user data to keep tier in sync
+- Added `initializeAuth()` call and session sync on app startup in main.tsx
+
 ---
 
 ## [1.0.0] - 2025-01-11
